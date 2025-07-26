@@ -1,0 +1,133 @@
+# Install dependencies
+!apt-get install poppler-utils -y
+!apt-get install tesseract-ocr -y
+!apt-get install tesseract-ocr-ben -y  # Bengali OCR
+!pip install pytesseract pdf2image
+
+from pdf2image import convert_from_path
+import pytesseract
+
+# Convert only first 60 pages to images
+pages = convert_from_path("HSC26_Bangla_1st_paper.pdf", first_page=1, last_page=60)
+
+# Extract text from these pages
+extracted_text = ""
+for i, page in enumerate(pages, start=1):
+    print(f"Processing page {i}...")
+    text = pytesseract.image_to_string(page, lang="ben")  # Bengali OCR
+    extracted_text += text + "\n"
+
+# Save to text file
+with open("bangla_first_60_pages.txt", "w", encoding="utf-8") as f:
+    f.write(extracted_text)
+
+print("Finished extracting first 60 pages.")
+
+print(extracted_text[:2000])  # Print first 2000 characters
+
+import re
+
+# Load the extracted text
+with open("bangla_first_60_pages.txt", "r", encoding="utf-8") as f:
+    raw_text = f.read()
+
+print("Original Text Length:", len(raw_text))
+
+# STEP 1: Clean and normalize text
+cleaned_text = re.sub(r"\s+", " ", raw_text).strip()
+cleaned_text = re.sub(r"[^\u0980-\u09FF\s\.,?!]", "", cleaned_text)  # Keep only Bengali + punctuation
+
+# Fix common OCR mistakes
+fix_map = {
+    "অা": "আ", "াা": "া", "িি": "ি", "ীী": "ী", "ুু": "ু", "ূূ": "ূ",
+    "ক্ক": "ক", "গ্গ": "গ", "ত্ত": "ত", "ব্ব": "ব", "ল্ল": "ল", "ন্ন": "ন", "ম্ম": "ম", "ষ্ষ": "ষ",
+    "ংং": "ং", "ঃঃ": "ঃ", "ঁঁ": "ঁ", "।।": "।", "..": "."
+}
+for wrong, right in fix_map.items():
+    cleaned_text = cleaned_text.replace(wrong, right)
+
+# Save cleaned text
+with open("bangla_first_60_pages_cleaned.txt", "w", encoding="utf-8") as f:
+    f.write(cleaned_text)
+
+print("Cleaned Text Saved: bangla_first_60_pages_cleaned.txt")
+print("Sample Cleaned Text:\n", cleaned_text[:1000])  # Preview first 1000 chars
+
+# Install langchain if not already installed
+!pip install langchain tiktoken
+
+from langchain.text_splitter import RecursiveCharacterTextSplitter
+
+# Load cleaned text
+with open("bangla_first_60_pages_cleaned.txt", "r", encoding="utf-8") as f:
+    cleaned_text = f.read()
+
+# Split text into chunks
+text_splitter = RecursiveCharacterTextSplitter(
+    chunk_size=500,    # Each chunk has ~500 characters
+    chunk_overlap=50,  # Overlap of 50 characters for better context
+    separators=["।", "\n"]  # Split at Bengali sentence end or newline
+)
+
+documents = text_splitter.create_documents([cleaned_text])
+
+# Check how many chunks were created
+print(f"Total Chunks Created: {len(documents)}")
+
+# Preview first chunk
+print("Sample Chunk (Chunk 1):\n", documents[0].page_content)
+
+# Install necessary libraries
+!pip install sentence-transformers faiss-cpu langchain-community
+
+from langchain.embeddings import HuggingFaceEmbeddings
+from langchain.vectorstores import FAISS
+
+# Load multilingual embedding model
+embedding_model = HuggingFaceEmbeddings(
+    model_name="sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2"
+)
+
+# Create FAISS vector store from chunks
+vectorstore = FAISS.from_documents(documents, embedding_model)
+
+# Save FAISS index locally
+vectorstore.save_local("bangla_rag_index")
+
+print("FAISS Vector Store created and saved as: bangla_rag_index")
+
+from transformers import pipeline
+from langchain.vectorstores import FAISS
+from langchain_huggingface.embeddings import HuggingFaceEmbeddings
+
+# Load FAISS Vector Store
+embedding_model = HuggingFaceEmbeddings(
+    model_name="sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2"
+)
+vectorstore = FAISS.load_local(
+    "bangla_rag_index",
+    embeddings=embedding_model,
+    allow_dangerous_deserialization=True
+)
+
+# Load QA Pipeline from HuggingFace
+qa_pipeline = pipeline("question-answering", model="deepset/xlm-roberta-base-squad2")
+
+# Ask a question
+query = "কাকে অনুপমের ভাগ্য দেবতা বলে উল্লেখ করা হয়েছে?"
+
+# Retrieve top-k relevant chunks
+docs = vectorstore.similarity_search(query, k=3)
+context = " ".join([doc.page_content for doc in docs])
+
+# Apply QA pipeline
+result = qa_pipeline({
+    "question": query,
+    "context": context
+})
+
+# Print answer and context sources
+print("Answer:", result["answer"])
+print("\nSource Chunks:")
+for i, doc in enumerate(docs, 1):
+    print(f"{i}.", doc.page_content[:200].strip(), "...")
