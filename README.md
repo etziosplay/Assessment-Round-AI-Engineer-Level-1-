@@ -54,7 +54,7 @@ pip install langchain faiss-cpu sentence-transformers transformers
 from transformers import pipeline
 
 # Ask a question (Bangla or English)
-query = "অন্নদামের ভাষায় সুকুমার কাকে বলা হয়েছে?"
+query = "কাকে অনুপমের ভাগ্য দেবতা বলে উল্লেখ করা হয়েছে?"
 
 # Retrieve top relevant context
 docs = retriever.get_relevant_documents(query)
@@ -80,33 +80,10 @@ print("Answer:", response["answer"])
 
 | Example Question | Answer |
 |------------------|--------|
-| অন্নদামের ভাষায় সুকুমার কাকে বলা হয়েছে? | অতনুকে |
-
----
-
-## 📌 TODO
-
-- [ ] UI with Streamlit or Gradio
-- [ ] Add OCR support for scanned textbooks
-- [ ] Expand to other subjects
-- [ ] Deploy via HuggingFace Spaces / Colab
-
----
-
-## 🤝 Contributing
-
-Contributions, issue reports, or suggestions are very welcome! Feel free to fork and improve the project.
-
----
-
-## 📜 License
-
-MIT License
+| কাকে অনুপমের ভাগ্য দেবতা বলে উল্লেখ করা হয়েছে? | মামাকে |
 
 ---
 
 ## ✍️ Author
 
-**Niamul Hassan Samin**  
-Final Year CSE Student, AI & NLP Enthusiast  
-🇧🇩 Bangladesh
+**Niamul Hassan Samin** 
